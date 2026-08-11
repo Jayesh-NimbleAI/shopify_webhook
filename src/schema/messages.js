@@ -5,7 +5,7 @@ export const createMessagesSchema = async (client) => {
     console.log('Initializing messages schema...');
 
     // Removed the drop statement to avoid wiping data on every init
-    // await client.query('DROP TABLE IF EXISTS messages CASCADE');
+     await client.query('DROP TABLE IF EXISTS messages CASCADE');
 
     // Consolidated Create Table Query
     await client.query(`
@@ -33,8 +33,8 @@ export const createMessagesSchema = async (client) => {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_wamid ON messages(wamid)`);
 
     // Ensure legacy constraints are removed without dropping the table
-    //await client.query(`ALTER TABLE messages ALTER COLUMN message DROP NOT NULL`);
-    //await client.query(`ALTER TABLE messages ALTER COLUMN sender_name DROP NOT NULL`);
+    await client.query(`ALTER TABLE messages ALTER COLUMN message DROP NOT NULL`);
+    await client.query(`ALTER TABLE messages ALTER COLUMN sender_name DROP NOT NULL`);
 
     console.log('✅ Messages schema initialized successfully');
   } catch (error) {

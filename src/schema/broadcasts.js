@@ -54,24 +54,24 @@ export async function createBroadcastsSchema(client) {
     `);
 
     // 4. Message Alterations for Broadcasts
-    // await client.query(`
-    //   DO $$ 
-    //   BEGIN
-    //     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'broadcast_id') THEN
-    //       ALTER TABLE messages ADD COLUMN broadcast_id UUID REFERENCES broadcasts(broadcast_id) ON DELETE CASCADE;
-    //     END IF;
-    //     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'contact_id') THEN
-    //       ALTER TABLE messages ADD COLUMN contact_id UUID REFERENCES contacts(contact_id) ON DELETE SET NULL;
-    //     END IF;
-    //     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'error_reason') THEN
-    //       ALTER TABLE messages ADD COLUMN error_reason TEXT;
-    //     END IF;
-    //   END $$;
-    // `);
+     await client.query(`
+       DO $$ 
+       BEGIN
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'broadcast_id') THEN
+           ALTER TABLE messages ADD COLUMN broadcast_id UUID REFERENCES broadcasts(broadcast_id) ON DELETE CASCADE;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'contact_id') THEN
+           ALTER TABLE messages ADD COLUMN contact_id UUID REFERENCES contacts(contact_id) ON DELETE SET NULL;
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'error_reason') THEN
+           ALTER TABLE messages ADD COLUMN error_reason TEXT;
+         END IF;
+       END $$;
+     `);
 
     // 5. Indexes for performance
-    //await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_broadcast_id ON messages(broadcast_id)`);
-    //await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_wamid ON messages(wamid)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_broadcast_id ON messages(broadcast_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_wamid ON messages(wamid)`);
 
     console.log('✅ Broadcasts schema initialized (Production-Ready)');
   } catch (error) {

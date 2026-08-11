@@ -1,6 +1,5 @@
 import express from "express";
 import { handleOrderWebhook } from "../controllers/webhook.controller.js";
-import { handleCheckoutWebhook } from "../controllers/checkout.webhook.controller.js";
 const router = express.Router();
 
 // Shopify Order Created Webhook
