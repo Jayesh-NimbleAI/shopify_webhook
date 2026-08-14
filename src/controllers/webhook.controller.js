@@ -9,6 +9,7 @@ import { processOrderWebhook } from "../services/webhook.service.js";
 export const handleOrderWebhook = async (req, res) => {
   try {
     // Shopify sends this header with every webhook
+    console.log("Webhook.controllers.js");
     const shopDomain =
       req.headers["x-shopify-shop-domain"] ||
       req.headers["shopify-shop-domain"];

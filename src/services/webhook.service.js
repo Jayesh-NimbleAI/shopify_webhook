@@ -169,6 +169,7 @@ const extractOrderData = (orderPayload) => {
 export const processOrderWebhook = async (userId, orderPayload) => {
   try {
     // Prevent duplicate orders
+    console.log("webhook.secrvice.js")
     const existingOrder = await getOrderByShopifyId(orderPayload.id);
     if (existingOrder) {
       console.log("⚠️ Duplicate order received.");
@@ -196,6 +197,8 @@ export const processOrderWebhook = async (userId, orderPayload) => {
 
     //store order
     await createOrder(order)
+    
+    console.log(order);
 
     //UPDATE THE BROADCAST ANALYTICS (attributed_revenues)    
     if (order.broadcast_id) {
