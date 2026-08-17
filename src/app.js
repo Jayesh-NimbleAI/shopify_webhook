@@ -1,6 +1,5 @@
 import express from "express";
 import cors from "cors";
-
 import webhookRoutes from "./routes/webhook.routes.js";
 
 const app = express();
@@ -10,16 +9,18 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Routes
+app.use("/webhooks", webhookRoutes);
+
 // Health Check
-app.get("/", (req, res) => {
+app.get("/health", (req, res) => {
+  console.log("Health checkup.")
   res.json({
     success: true,
     message: "Shopify Webhook Service Running 🚀",
   });
 });
 
-// Routes
-app.use("/webhooks", webhookRoutes);
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({

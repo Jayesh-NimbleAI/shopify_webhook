@@ -31,7 +31,8 @@ async function verifyCustomerFromBroadcast(broadcastId, customerPhone) {
       normalizePhone(contact.phone_number) === normalizedCustomerPhone
   );
   if (!matchedContact) {
-    throw new Error("🚫 Customer is not attributed to the latest broadcast.");
+    console.log("🚫 Customer is not attributed to the latest broadcast.");
+    return;
   }
   return matchedContact;
 }
@@ -44,7 +45,8 @@ const getCustomerPhone = (orderPayload) => {
     null;
 
   if (!phone) {
-    throw new Error("📵 Customer has no phone number. Skipping webhook.");
+    console.log("📵 Customer has no phone number. Skipping webhook.");
+    return;
   }
 
   return phone;
@@ -61,7 +63,8 @@ const getCustomerEmail = (orderPayload) => {
 const getLatestBroadcastOrThrow = async (userId) => {
   const broadcast = await getLatestBroadcast(userId);
   if (!broadcast) {
-    throw new Error("📭 No active/latest broadcast found for this user.");
+    console.log("📭 No active/latest broadcast found for this user.");
+    return;
   }
 
   return broadcast;
@@ -74,7 +77,8 @@ const getAttribution = async (latestBroadcast, customerPhone) => {
   );
 
   if (!attribution) {
-    throw new Error("🚫 Customer is not attributed to our broadcast.");
+    console.log("🚫 Customer is not attributed to our broadcast.");
+    return;
   }
 
   return attribution;
@@ -184,7 +188,10 @@ export const processOrderWebhook = async (userId, orderPayload) => {
 
     //DB Operations
     const broadcast = await getLatestBroadcastOrThrow(userId);
-    const attribution = await getAttribution(broadcast,orderData.customer_phone);
+    if (!broadcast) return;
+
+    const attribution = await getAttribution(broadcast, orderData.customer_phone);
+    if (!attribution) return;
 
     //Building the DB object
     const order = buildOrder(
@@ -196,7 +203,7 @@ export const processOrderWebhook = async (userId, orderPayload) => {
     ); 
 
     //store order
-    await createOrder(order)
+    await createOrder(order);
     
     console.log(order);
 
