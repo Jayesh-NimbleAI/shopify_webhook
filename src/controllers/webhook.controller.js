@@ -25,6 +25,7 @@ export const handleOrderWebhook = async (req, res) => {
     const merchant = await getMerchantByShopDomain(shopDomain);
 
     if (!merchant) {
+      console.log("Merchant not found")
       return res.status(404).json({
         success: false,
         message: "Merchant not found.",
