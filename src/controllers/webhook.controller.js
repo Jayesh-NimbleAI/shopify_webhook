@@ -33,6 +33,8 @@ export const handleOrderWebhook = async (req, res) => {
     }
 
     // Process the webhook
+    console.log(req.body);
+    console.log(merchant.uid);
     const order = await processOrderWebhook(
       merchant.uid,
       req.body
