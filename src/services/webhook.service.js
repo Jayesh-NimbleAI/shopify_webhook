@@ -48,7 +48,7 @@ const getCustomerPhone = (orderPayload) => {
     console.log("📵 Customer has no phone number. Skipping webhook.");
     return;
   }
-
+  console.log("Phone number is : " , phone)
   return phone;
 
 };
@@ -99,6 +99,7 @@ const getIsCod = (orderPayload) => {
     gatewayLower.includes("cash on delivery") ||
     gatewayLower.includes("cod") ||
     orderPayload.financial_status === "pending";
+    console.log("Is Delivery COD : " , is_cod);
   return is_cod;
 }
 
@@ -205,7 +206,7 @@ export const processOrderWebhook = async (userId, orderPayload) => {
     //store order
     await createOrder(order);
     
-    console.log(order);
+    console.log("Order Stored : ",order);
 
     //UPDATE THE BROADCAST ANALYTICS (attributed_revenues)    
     if (order.broadcast_id) {
