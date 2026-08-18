@@ -114,6 +114,7 @@ export const deleteClick = async (click_id) => {
 };
 
 export const getClickedContactWithPhoneNumbers = async (broadcast_id) => {
+  console.log("Broadcast Id : " , broadcast_id);
   const query = `
     SELECT
       c.contact_id,
