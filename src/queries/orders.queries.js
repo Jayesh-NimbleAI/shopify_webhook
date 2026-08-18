@@ -2,10 +2,39 @@
 
 import pool from "../config/db.js";
 
+let columnsChecked = false;
+const ensureOrderColumnsExist = async () => {
+  if (columnsChecked) return;
+  try {
+    await pool.query(`
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS shopify_order_name VARCHAR(100);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_id INTEGER;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(50);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_amount DECIMAL(10,2);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_quantity INTEGER DEFAULT 0;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS currency VARCHAR(10);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_cod BOOLEAN DEFAULT FALSE;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS financial_status VARCHAR(50);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(50);
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS broadcast_id UUID;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS webhook_payload JSONB DEFAULT '{}'::jsonb;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+    `);
+    console.log("🛠️ Orders table columns verified / updated successfully.");
+    columnsChecked = true;
+  } catch (error) {
+    console.error("❌ Failed to verify/update Orders table columns:", error);
+  }
+};
+
 /**
  * Create a new order
  */
 export const createOrder = async (order) => {
+  await ensureOrderColumnsExist();
   const query = `
     INSERT INTO orders (
       shopify_order_id,
@@ -59,6 +88,7 @@ export const createOrder = async (order) => {
  * Get order by Shopify Order ID
  */
 export const getOrderByShopifyId = async (shopifyOrderId) => {
+  await ensureOrderColumnsExist();
   const query = `
     SELECT *
     FROM orders
