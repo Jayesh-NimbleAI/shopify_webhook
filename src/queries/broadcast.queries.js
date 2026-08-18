@@ -107,6 +107,6 @@ export const getLatestBroadcast = async (userId) => {
   `;
 
   const { rows } = await pool.query(query, [userId]);
-
+  console.log("Latest broadcast:", rows[0]);
   return rows[0] || null;
 };
