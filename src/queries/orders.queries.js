@@ -52,11 +52,13 @@ export const createOrder = async (order) => {
       fulfillment_status,
       broadcast_id,
       webhook_payload,
-      ordered_at
+      ordered_at,
+      total_price,
+      status
     )
     VALUES (
       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-      $11,$12,$13,$14,$15,$16
+      $11,$12,$13,$14,$15,$16,$17,$18
     )
     RETURNING *;
   `;
@@ -78,6 +80,8 @@ export const createOrder = async (order) => {
     order.broadcast_id,
     order.webhook_payload,
     order.ordered_at,
+    order.total_amount,        // total_price (for the legacy orders schema constraint)
+    order.financial_status     // status (for the legacy orders schema status)
   ];
 
   const { rows } = await pool.query(query, values);
