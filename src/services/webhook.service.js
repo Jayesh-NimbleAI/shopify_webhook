@@ -179,9 +179,14 @@ export const processOrderWebhook = async (userId, orderPayload) => {
     );
 
     if (!clickRecord) {
+      // Surface the mismatch: show which broadcast the contact last clicked vs. the latest
+      const { getLatestClickByContact } = await import("../queries/clicks.queries.js");
+      const lastClick = await getLatestClickByContact(contact.contact_id);
       console.log(
-        `🚫 Step 6: Contact ${contact.contact_id} has NOT clicked broadcast ${latestBroadcast.broadcast_id}. Order will NOT be stored.`
+        `🚫 Step 6: Attribution SKIPPED — contact ${contact.contact_id} did NOT click the latest broadcast.`
       );
+      console.log(`   ├─ Latest broadcast : ${latestBroadcast.broadcast_id}`);
+      console.log(`   └─ Last click was on: ${lastClick?.broadcast_id ?? "(no clicks on record)"} at ${lastClick?.clicked_at ?? "N/A"}`);
       return { attributed: false, reason: "no_click_on_latest_broadcast" };
     }
 
