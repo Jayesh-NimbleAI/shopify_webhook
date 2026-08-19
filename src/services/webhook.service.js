@@ -1,8 +1,12 @@
 // services/webhook.service.js
 
 import { getOrderByShopifyId, createOrder } from "../queries/orders.queries.js";
-import { addAttributedRevenue, getLatestBroadcast, getBroadcastById } from "../queries/broadcast.queries.js";
-import { hasContactClickedBroadcast, getLatestClickByContact } from "../queries/clicks.queries.js";
+import {
+  addAttributedRevenue,
+  incrementConversions,
+  getLatestBroadcast,
+} from "../queries/broadcast.queries.js";
+import { hasContactClickedBroadcast } from "../queries/clicks.queries.js";
 import { getContactByNormalizedPhone } from "../queries/contacts.queries.js";
 
 /**
@@ -125,9 +129,10 @@ const buildOrder = (userId, orderPayload, orderData, broadcast, contact) => {
  *   1. Receive webhook & merchant ID (resolved upstream in controller)
  *   2. Prevent duplicate orders
  *   3. Extract order info from payload
- *   4. Resolve contact by customer phone number
- *   5. Check click attribution on latest broadcast / merchant's clicked broadcast
- *   6. Only if clicked → store order + update attributed revenue
+ *   4. Get the merchant's latest broadcast
+ *   5. Resolve contact by customer phone number
+ *   6. Check if contact clicked the latest broadcast
+ *   7. Store order + update attributed revenue and conversions
  */
 export const processOrderWebhook = async (userId, orderPayload) => {
   try {
@@ -155,63 +160,50 @@ export const processOrderWebhook = async (userId, orderPayload) => {
     const normalizedPhone = normalizePhone(orderData.customer_phone);
     console.log(`🔢 Normalized phone: ${normalizedPhone}`);
 
-    // ── Step 4: Resolve contact by phone ────────────────────────────────────
+    // ── Step 4: Get merchant's latest broadcast ──────────────────────────────
+    const latestBroadcast = await getLatestBroadcast(userId);
+    if (!latestBroadcast) {
+      console.log("📭 Step 4: No broadcast found for this merchant. Skipping.");
+      return { attributed: false, reason: "no_broadcast" };
+    }
+    console.log(`📡 Step 4: Latest broadcast → ${latestBroadcast.broadcast_id}`);
+
+    // ── Step 5: Resolve contact by phone ────────────────────────────────────
     const contact = await getContactByNormalizedPhone(userId, normalizedPhone);
     if (!contact) {
-      console.log(`👤 Step 4: Contact not found for phone ${normalizedPhone}. Customer is not a WhatsApp subscriber — skipping.`);
+      console.log(`👤 Step 5: Contact not found for phone ${normalizedPhone}. Customer is not a WhatsApp subscriber — skipping.`);
       return { attributed: false, reason: "contact_not_found" };
     }
-    console.log(`🎯 Step 4: Contact found → contact_id: ${contact.contact_id}`);
+    console.log(`🎯 Step 5: Contact found → contact_id: ${contact.contact_id}`);
 
-    // ── Step 5: Resolve broadcast attribution ───────────────────────────────
-    let broadcast = await getLatestBroadcast(userId);
-    let clickRecord = null;
+    // ── Step 6: Check click attribution on the latest broadcast ─────────────
+    const clickRecord = await hasContactClickedBroadcast(
+      contact.contact_id,
+      latestBroadcast.broadcast_id
+    );
 
-    if (broadcast) {
-      console.log(`📡 Step 5: Latest merchant broadcast → ${broadcast.broadcast_id}`);
-      // Check if contact clicked this latest broadcast
-      clickRecord = await hasContactClickedBroadcast(
-        contact.contact_id,
-        broadcast.broadcast_id
-      );
-    }
-
-    // If contact did not click the latest broadcast, check if they clicked ANY broadcast by this merchant
     if (!clickRecord) {
-      const latestContactClick = await getLatestClickByContact(contact.contact_id);
-      if (latestContactClick) {
-        const clickedBroadcast = await getBroadcastById(latestContactClick.broadcast_id);
-        if (clickedBroadcast && Number(clickedBroadcast.user_id) === Number(userId)) {
-          console.log(
-            `🎯 Attribution matched via contact click → broadcast_id: ${clickedBroadcast.broadcast_id}`
-          );
-          broadcast = clickedBroadcast;
-          clickRecord = latestContactClick;
-        }
-      }
-    }
-
-    if (!clickRecord || !broadcast) {
       console.log(
-        `🚫 Step 6: Contact ${contact.contact_id} has NOT clicked any broadcast for merchant ${userId}. Order will NOT be stored.`
+        `🚫 Step 6: Contact ${contact.contact_id} has NOT clicked latest broadcast ${latestBroadcast.broadcast_id}. Order will NOT be stored.`
       );
-      return { attributed: false, reason: "no_click_on_broadcast" };
+      return { attributed: false, reason: "no_click_on_latest_broadcast" };
     }
 
     console.log(
-      `✅ Step 6: Click confirmed! Broadcast: ${broadcast.broadcast_id}, Button: "${clickRecord.button_clicked}" at ${clickRecord.clicked_at}`
+      `✅ Step 6: Click confirmed on latest broadcast ${latestBroadcast.broadcast_id}! Button: "${clickRecord.button_clicked}" at ${clickRecord.clicked_at}`
     );
 
     // ── Step 7: Build & store order ──────────────────────────────────────────
-    const order = buildOrder(userId, orderPayload, orderData, broadcast, contact);
+    const order = buildOrder(userId, orderPayload, orderData, latestBroadcast, contact);
     await createOrder(order);
     console.log("💾 Step 7: Order stored successfully:", order);
 
-    // ── Step 8: Update broadcast attributed revenue ──────────────────────────
+    // ── Step 8: Update broadcast attributed revenue & conversions ─────────────
     console.log(
       `📈 Step 8: Updating attributed revenue for broadcast ${order.broadcast_id} (+${order.total_amount})`
     );
     await addAttributedRevenue(order.broadcast_id, order.total_amount);
+    await incrementConversions(order.broadcast_id);
 
     console.log("✅ processOrderWebhook complete ─────────────────────────────\n");
     return { attributed: true, order };
