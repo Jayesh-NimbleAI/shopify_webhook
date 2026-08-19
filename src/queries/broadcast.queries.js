@@ -25,7 +25,7 @@ export const getBroadcastsByUserId = async (userId) => {
     SELECT *
     FROM broadcasts
     WHERE user_id = $1
-    ORDER BY created_at DESC;
+    ORDER BY created_at DESC NULLS LAST;
   `;
 
   const { rows } = await pool.query(query, [userId]);
@@ -96,13 +96,13 @@ export const updateBroadcastStatus = async (
 };
 
 
-// getting the latest broadcaste by the user/merchant
+// getting the latest broadcast by the user/merchant
 export const getLatestBroadcast = async (userId) => {
   const query = `
     SELECT *
     FROM broadcasts
     WHERE user_id = $1
-    ORDER BY created_at DESC
+    ORDER BY created_at DESC NULLS LAST
     LIMIT 1;
   `;
 

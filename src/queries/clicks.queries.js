@@ -39,12 +39,12 @@ export const getLatestClickByContact = async (contact_id) => {
     SELECT *
     FROM clicks
     WHERE contact_id = $1
-    ORDER BY clicked_at DESC
+    ORDER BY clicked_at DESC NULLS LAST
     LIMIT 1;
   `;
 
   const { rows } = await pool.query(query, [contact_id]);
-  return rows[0];
+  return rows[0] || null;
 };
 
 /**
@@ -55,7 +55,7 @@ export const getClicksByBroadcast = async (broadcast_id) => {
     SELECT *
     FROM clicks
     WHERE broadcast_id = $1
-    ORDER BY clicked_at DESC;
+    ORDER BY clicked_at DESC NULLS LAST;
   `;
 
   const { rows } = await pool.query(query, [broadcast_id]);
