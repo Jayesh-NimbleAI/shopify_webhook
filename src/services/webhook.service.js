@@ -1,27 +1,27 @@
 // services/webhook.service.js
 
 import { getOrderByShopifyId, createOrder } from "../queries/orders.queries.js";
-import { addAttributedRevenue, getLatestBroadcast, getBroadcastById } from "../queries/broadcast.queries.js";
-import { getClickedContactWithPhoneNumbers, createClick, hasContactClickedBroadcast, getLatestClickByContact } from "../queries/clicks.queries.js";
-import { getContactByNormalizedPhone, createContact } from "../queries/contacts.queries.js";
+import { addAttributedRevenue, getLatestBroadcast } from "../queries/broadcast.queries.js";
+import { hasContactClickedBroadcast } from "../queries/clicks.queries.js";
+import { getContactByNormalizedPhone } from "../queries/contacts.queries.js";
 
 /**
- * Normalize phone numbers
- * Example:
- * +91 98765-43210 -> 9876543210
+ * Normalize phone numbers to last 10 digits
+ * Example: +91 98765-43210 -> 9876543210
  */
 const normalizePhone = (phone) => {
   if (!phone) return null;
   return phone.replace(/\D/g, "").slice(-10);
 };
 
+// ─── Order Data Extraction Helpers ───────────────────────────────────────────
+
 /**
- * Verify whether the customer belongs to the clicked contacts
- * of the latest broadcast.
+ * Extract customer phone from order payload
  */
-// Customer Details
 const getCustomerPhone = (orderPayload) => {
-  const phone = orderPayload.customer?.phone ||
+  const phone =
+    orderPayload.customer?.phone ||
     orderPayload.shipping_address?.phone ||
     null;
 
@@ -29,212 +29,182 @@ const getCustomerPhone = (orderPayload) => {
     console.log("📵 Customer has no phone number. Skipping webhook.");
     return null;
   }
-  console.log("Phone number is : " , phone)
+  console.log("📞 Customer phone:", phone);
   return phone;
 };
 
+/**
+ * Extract customer full name
+ */
 const getCustomerName = (orderPayload) =>
   `${orderPayload.customer?.first_name || ""} ${orderPayload.customer?.last_name || ""}`.trim();
 
-const getCustomerEmail = (orderPayload) => {
-  return orderPayload.customer?.email || null;
-}
+/**
+ * Extract customer email
+ */
+const getCustomerEmail = (orderPayload) =>
+  orderPayload.customer?.email || null;
 
-// Calculate total quantity
-const getTotalQuantity = (orderPayload) => {
-  return orderPayload.line_items?.reduce(
-    (sum, item) => sum + item.quantity,
-    0
-  ) || 0;
-}
+/**
+ * Calculate total quantity across all line items
+ */
+const getTotalQuantity = (orderPayload) =>
+  orderPayload.line_items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
 
-// Determine payment type
+/**
+ * Determine if order is Cash on Delivery
+ */
 const getIsCod = (orderPayload) => {
   const gatewayLower = (orderPayload.gateway || "").toLowerCase();
   const is_cod =
     gatewayLower.includes("cash on delivery") ||
     gatewayLower.includes("cod") ||
     orderPayload.financial_status === "pending";
-    console.log("Is Delivery COD : " , is_cod);
+  console.log("💵 Is COD:", is_cod);
   return is_cod;
-}
-
-// Build Order Object
-const buildOrder = (
-  userId,
-  orderPayload,
-  orderData,
-  broadcast,
-  attribution
-) => {
-
-  return {
-    shopify_order_id: orderPayload.id,
-    shopify_order_name: orderPayload.name,
-
-    user_id: userId,
-
-    contact_id: attribution.contact_id,
-    broadcast_id: broadcast.broadcast_id,
-
-    customer_name: orderData.customer_name,
-    customer_email: orderData.customer_email,
-    customer_phone: orderData.customer_phone,
-
-    total_amount: Number(orderPayload.total_price),
-    total_quantity: orderData.total_quantity,
-    currency: orderPayload.currency,
-
-    is_cod: orderData.is_cod,
-
-    financial_status: orderPayload.financial_status,
-    fulfillment_status: orderPayload.fulfillment_status,
-
-    webhook_payload: orderPayload,
-
-    ordered_at: orderPayload.created_at
-  };
 };
 
+// ─── Extraction Pipeline ─────────────────────────────────────────────────────
+
 const orderExtractionSteps = [
-  (orderPayload) => ({
-    customer_phone: getCustomerPhone(orderPayload)
-  }),
-  (orderPayload) => ({
-    customer_name: getCustomerName(orderPayload)
-  }),
-  (orderPayload) => ({
-    customer_email: getCustomerEmail(orderPayload)
-  }),
-  (orderPayload) => ({
-    total_quantity: getTotalQuantity(orderPayload)
-  }),
-  (orderPayload) => ({
-    is_cod: getIsCod(orderPayload)
-  })
-]
+  (orderPayload) => ({ customer_phone: getCustomerPhone(orderPayload) }),
+  (orderPayload) => ({ customer_name: getCustomerName(orderPayload) }),
+  (orderPayload) => ({ customer_email: getCustomerEmail(orderPayload) }),
+  (orderPayload) => ({ total_quantity: getTotalQuantity(orderPayload) }),
+  (orderPayload) => ({ is_cod: getIsCod(orderPayload) }),
+];
 
 const extractOrderData = (orderPayload) => {
   let orderData = {};
-
   for (const step of orderExtractionSteps) {
-    orderData = {
-      ...orderData,
-      ...step(orderPayload)
-    };
+    orderData = { ...orderData, ...step(orderPayload) };
   }
   return orderData;
-}
+};
 
-// Process Shopify orders/create webhook
+// ─── Order Builder ────────────────────────────────────────────────────────────
+
+/**
+ * Build the order DB object from extracted data + broadcast attribution
+ */
+const buildOrder = (userId, orderPayload, orderData, broadcast, contact) => {
+  return {
+    shopify_order_id:    orderPayload.id,
+    shopify_order_name:  orderPayload.name,
+
+    user_id:             userId,
+
+    contact_id:          contact.contact_id,
+    broadcast_id:        broadcast.broadcast_id,
+
+    customer_name:       orderData.customer_name,
+    customer_email:      orderData.customer_email,
+    customer_phone:      orderData.customer_phone,
+
+    total_amount:        Number(orderPayload.total_price),
+    total_quantity:      orderData.total_quantity,
+    currency:            orderPayload.currency,
+
+    is_cod:              orderData.is_cod,
+
+    financial_status:    orderPayload.financial_status,
+    fulfillment_status:  orderPayload.fulfillment_status,
+
+    webhook_payload:     orderPayload,
+
+    ordered_at:          orderPayload.created_at,
+  };
+};
+
+// ─── Main Webhook Handler ─────────────────────────────────────────────────────
+
+/**
+ * Process a Shopify orders/create webhook.
+ *
+ * Attribution flow:
+ *   1. Receive webhook & merchant ID (resolved upstream in controller)
+ *   2. Prevent duplicate orders
+ *   3. Extract order info from payload
+ *   4. Get the merchant's latest broadcast
+ *   5. Resolve contact by customer phone number
+ *   6. Check if contact has clicked ANY button on the latest broadcast
+ *   7. Only if clicked → store order + update attributed revenue
+ */
 export const processOrderWebhook = async (userId, orderPayload) => {
   try {
-    console.log(`🚀 processOrderWebhook started for userId: ${userId}, Shopify orderId: ${orderPayload.id}`);
-    
-    // Prevent duplicate orders
+    console.log(`\n🚀 ── processOrderWebhook ──────────────────────────────`);
+    console.log(`   userId       : ${userId}`);
+    console.log(`   shopifyOrder : ${orderPayload.id}`);
+
+    // ── Step 2: Duplicate guard ──────────────────────────────────────────────
     const existingOrder = await getOrderByShopifyId(orderPayload.id);
     if (existingOrder) {
-      console.log("⚠️ Duplicate order received.");
-      return {
-        duplicate: true,
-        order: existingOrder
-      };
+      console.log("⚠️  Duplicate order received — skipping.");
+      return { duplicate: true, order: existingOrder };
     }
+    console.log("✅ Step 2: No duplicate found.");
 
-    // Run Function Array
+    // ── Step 3: Extract order data ───────────────────────────────────────────
     const orderData = extractOrderData(orderPayload);
-    console.log("📦 Extracted order data:", orderData);
+    console.log("📦 Step 3: Extracted order data:", orderData);
 
     if (!orderData.customer_phone) {
-      console.log("📵 Cannot process webhook: customer phone number is missing.");
-      return;
+      console.log("📵 Step 3: No customer phone — cannot attribute. Skipping.");
+      return { attributed: false, reason: "no_phone" };
     }
 
-    const normalizedCustomerPhone = normalizePhone(orderData.customer_phone);
-    console.log(`🔍 Checking attribution for customer phone: ${orderData.customer_phone} (Normalized: ${normalizedCustomerPhone})`);
+    const normalizedPhone = normalizePhone(orderData.customer_phone);
+    console.log(`🔢 Normalized phone: ${normalizedPhone}`);
 
-    // 1. Resolve contact by phone number
-    let contact = await getContactByNormalizedPhone(userId, normalizedCustomerPhone);
+    // ── Step 4: Get merchant's latest broadcast ──────────────────────────────
+    const latestBroadcast = await getLatestBroadcast(userId);
+    if (!latestBroadcast) {
+      console.log("📭 Step 4: No broadcast found for this merchant. Skipping.");
+      return { attributed: false, reason: "no_broadcast" };
+    }
+    console.log(`📡 Step 4: Latest broadcast → ${latestBroadcast.broadcast_id}`);
 
+    // ── Step 5: Resolve contact by phone ────────────────────────────────────
+    const contact = await getContactByNormalizedPhone(userId, normalizedPhone);
     if (!contact) {
-      console.log(`👤 Contact not found for phone ${normalizedCustomerPhone}. Creating new contact...`);
-      const first_name = orderPayload.customer?.first_name || orderPayload.shipping_address?.first_name || "";
-      const last_name = orderPayload.customer?.last_name || orderPayload.shipping_address?.last_name || "";
-      const email = orderPayload.customer?.email || orderPayload.shipping_address?.email || null;
-      const shopify_customer_id = orderPayload.customer?.id ? String(orderPayload.customer.id) : null;
-
-      contact = await createContact({
-        user_id: userId,
-        shopify_customer_id,
-        phone_number: orderData.customer_phone,
-        email,
-        first_name,
-        last_name
-      });
-      console.log(`✅ New contact created:`, contact);
-    } else {
-      console.log(`🎯 Existing contact found:`, contact);
+      console.log(`👤 Step 5: Contact not found for phone ${normalizedPhone}. Customer is not a WhatsApp subscriber — skipping.`);
+      return { attributed: false, reason: "contact_not_found" };
     }
+    console.log(`🎯 Step 5: Contact found → contact_id: ${contact.contact_id}`);
 
-    // 2. Resolve broadcast from contact's clicks or fall back to merchant's latest broadcast
-    const latestClick = await getLatestClickByContact(contact.contact_id);
-    let broadcast = null;
+    // ── Step 6: Check click attribution on the latest broadcast ─────────────
+    const clickRecord = await hasContactClickedBroadcast(
+      contact.contact_id,
+      latestBroadcast.broadcast_id
+    );
 
-    if (latestClick) {
-      broadcast = await getBroadcastById(latestClick.broadcast_id);
-      console.log(`🎯 Resolved broadcast from contact's click:`, broadcast);
-    }
-
-    if (!broadcast) {
-      broadcast = await getLatestBroadcast(userId);
-      console.log(`📡 Fallback to merchant's latest broadcast:`, broadcast);
-    }
-
-    if (!broadcast) {
-      console.log("📭 Cannot process webhook: latest broadcast not found.");
-      return;
-    }
-
-    // 3. Ensure click attribution exists for this resolved broadcast so they show in click queries
-    const clicked = await hasContactClickedBroadcast(contact.contact_id, broadcast.broadcast_id);
-    if (!clicked) {
-      console.log(`🖱️ Contact has not clicked broadcast. Creating click attribution...`);
-      const newClick = await createClick({
-        broadcast_id: broadcast.broadcast_id,
-        contact_id: contact.contact_id,
-        button_clicked: "Shopify Purchase"
-      });
-      console.log(`✅ Click attribution created:`, newClick);
-    } else {
-      console.log(`✅ Contact already has click attribution for this broadcast.`);
-    }
-
-    // 4. Build the DB object
-    const order = buildOrder(
-      userId,
-      orderPayload,
-      orderData,
-      broadcast,
-      contact
-    ); 
-
-    // store order
-    await createOrder(order);
-    console.log("Order Stored : ", order);
-
-    // UPDATE THE BROADCAST ANALYTICS (attributed_revenues)    
-    if (order.broadcast_id) {
-      console.log(`📈 Updating attributed revenue for broadcast: ${order.broadcast_id} with amount: ${order.total_amount}`);
-      await addAttributedRevenue(
-        order.broadcast_id,
-        order.total_amount
+    if (!clickRecord) {
+      console.log(
+        `🚫 Step 6: Contact ${contact.contact_id} has NOT clicked broadcast ${latestBroadcast.broadcast_id}. Order will NOT be stored.`
       );
+      return { attributed: false, reason: "no_click_on_latest_broadcast" };
     }
-    console.log("✅ Order stored successfully");
-    return order;
+
+    console.log(
+      `✅ Step 6: Click confirmed! Button clicked: "${clickRecord.button_clicked}" at ${clickRecord.clicked_at}`
+    );
+
+    // ── Step 7: Build & store order ──────────────────────────────────────────
+    const order = buildOrder(userId, orderPayload, orderData, latestBroadcast, contact);
+    await createOrder(order);
+    console.log("💾 Step 7: Order stored successfully:", order);
+
+    // ── Step 8: Update broadcast attributed revenue ──────────────────────────
+    console.log(
+      `📈 Step 8: Updating attributed revenue for broadcast ${order.broadcast_id} (+${order.total_amount})`
+    );
+    await addAttributedRevenue(order.broadcast_id, order.total_amount);
+
+    console.log("✅ processOrderWebhook complete ─────────────────────────────\n");
+    return { attributed: true, order };
+
   } catch (error) {
-    console.error("❌ Error processing webhook:", error);
+    console.error("❌ Error in processOrderWebhook:", error);
     throw error;
   }
 };
-
