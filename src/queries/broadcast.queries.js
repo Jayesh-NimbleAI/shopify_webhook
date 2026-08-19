@@ -98,6 +98,8 @@ export const updateBroadcastStatus = async (
 
 // getting the latest broadcast by the user/merchant
 export const getLatestBroadcast = async (userId) => {
+  const uid = Number(userId) || userId;
+
   const query = `
     SELECT *
     FROM broadcasts
@@ -106,7 +108,18 @@ export const getLatestBroadcast = async (userId) => {
     LIMIT 1;
   `;
 
-  const { rows } = await pool.query(query, [userId]);
-  console.log("Latest broadcast:", rows[0]);
-  return rows[0] || null;
+  const result = await pool.query(query, [uid]);
+
+  if (result.rows.length === 0) {
+    console.log("📡 No broadcast found for merchant:", uid);
+    return null;
+  }
+
+  console.log(
+    "📡 Latest broadcast found:",
+    result.rows[0].broadcast_id,
+    `(${result.rows[0].name || "Broadcast"})`
+  );
+
+  return result.rows[0];
 };
