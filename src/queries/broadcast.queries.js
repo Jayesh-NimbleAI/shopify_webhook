@@ -123,3 +123,35 @@ export const getLatestBroadcast = async (userId) => {
 
   return result.rows[0];
 };
+
+/**
+ * Increment COD orders count for a broadcast
+ */
+export const incrementCodOrders = async (broadcastId) => {
+  const query = `
+    UPDATE broadcasts
+    SET
+      cod_orders = cod_orders + 1
+    WHERE broadcast_id = $1
+    RETURNING *;
+  `;
+
+  const { rows } = await pool.query(query, [broadcastId]);
+  return rows[0];
+};
+
+/**
+ * (Optional) Increment Prepaid orders count for a broadcast
+ */
+export const incrementPrepaidOrders = async (broadcastId) => {
+  const query = `
+    UPDATE broadcasts
+    SET
+      prepaid_orders = prepaid_orders + 1
+    WHERE broadcast_id = $1
+    RETURNING *;
+  `;
+
+  const { rows } = await pool.query(query, [broadcastId]);
+  return rows[0];
+};

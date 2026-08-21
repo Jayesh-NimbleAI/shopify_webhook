@@ -5,6 +5,8 @@ import {
   addAttributedRevenue,
   incrementConversions,
   getLatestBroadcast,
+  incrementCodOrders,
+  incrementPrepaidOrders,
 } from "../queries/broadcast.queries.js";
 import { hasContactClickedBroadcast } from "../queries/clicks.queries.js";
 import { getContactByNormalizedPhone } from "../queries/contacts.queries.js";
@@ -204,6 +206,14 @@ export const processOrderWebhook = async (userId, orderPayload) => {
     );
     await addAttributedRevenue(order.broadcast_id, order.total_amount);
     await incrementConversions(order.broadcast_id);
+    
+
+    // Check if order is cod or prepaid and increment the respective counter
+    if(order.is_cod){
+      await incrementCodOrders(order.broadcast_id)
+    }else{
+      await incrementPrepaidOrders(order.broadcast_id)
+    }
 
     console.log("✅ processOrderWebhook complete ─────────────────────────────\n");
     return { attributed: true, order };
